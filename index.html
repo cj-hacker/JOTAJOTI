@@ -65,7 +65,7 @@
 
     .footer { text-align:center; color: var(--muted); font-size: .9rem; margin: 24px 0; }
 
-    /* ===== NEW: Success pulse + glow ===== */
+    /* ===== SUCCESS: pulse + glow ===== */
     @keyframes pop {
       0% { transform: scale(0.96); }
       35% { transform: scale(1.02); }
@@ -77,11 +77,9 @@
       60% { box-shadow: 0 0 24px rgba(16,185,129,0.45); }
       100% { box-shadow: 0 0 0 rgba(16,185,129,0); }
     }
-    .ok.ok-animate {
-      animation: pop .45s ease-out, glow 1.2s ease-out;
-    }
+    .ok.ok-animate { animation: pop .45s ease-out, glow 1.2s ease-out; }
 
-    /* ===== NEW: Confetti overlay ===== */
+    /* ===== SUCCESS: Confetti overlay ===== */
     .confetti-wrap {
       position: absolute;
       inset: -10px;       /* slight bleed */
@@ -103,10 +101,362 @@
         opacity: 1;
       }
     }
+
+    /* ===== WRONG: shake + red beacon ===== */
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      15% { transform: translateX(-6px); }
+      30% { transform: translateX(6px); }
+      45% { transform: translateX(-5px); }
+      60% { transform: translateX(5px); }
+      75% { transform: translateX(-3px); }
+      90% { transform: translateX(3px); }
+    }
+    @keyframes beacon {
+      0%   { transform: scale(0.6); opacity: 0.9; }
+      70%  { transform: scale(1.6); opacity: 0.15; }
+      100% { transform: scale(2);   opacity: 0; }
+    }
+    .err.err-animate { animation: shake .45s ease-in-out; }
+
+    .red-beacon {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--bad);
+      box-shadow: 0 0 16px rgba(239,68,68,.9), 0 0 40px rgba(239,68,68,.5) inset;
+      pointer-events: none; z-index: 6;
+    }
+    .red-beacon::after {
+      content: "";
+      position: absolute; inset: 0; border-radius: 50%;
+      background: var(--bad);
+      filter: blur(2px);
+      animation: beacon 0.9s ease-out forwards;
+    }
   </style>
 </head>
 <body>
   <header>
     <h1>📡 ROF Secret Agent Code Checker</h1>
     <p>Your special agent needs to know if it is safe to return home. Type your 8-word code to confirm extraction is arranged. The checker ignores case and punctuation.</p>
-  </hea
+  </header>
+  <main class="container">
+    <section class="card">
+      <div class="grid">
+        <div>
+          <label for="team">Team</label>
+          <select id="team" aria-label="Select team">
+            <option value="1">Team 1 — Red</option>
+            <option value="2">Team 2 — Green</option>
+            <option value="3">Team 3 — Yellow</option>
+            <option value="4">Team 4 — Blue</option>
+          </select>
+        </div>
+        <div>
+          <label for="mode">Entry Mode</label>
+          <select id="mode" aria-label="Select entry mode">
+            <option value="phrase">Single line (full sentence)</option>
+            <option value="words">Eight boxes (one word each)</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="phraseBox" style="margin-top:12px;">
+        <label for="phrase">Enter your full 8-word message</label>
+        <textarea id="phrase" placeholder="Type your code here… e.g. THE ELEPHANT HAS BIG FEET BUT TINY TOES"></textarea>
+      </div>
+
+      <div id="wordsBox" style="display:none; margin-top:12px;">
+        <label>Enter your 8 words in order</label>
+        <div class="grid" id="wordInputs"></div>
+      </div>
+
+      <div class="controls">
+        <button class="btn-accent" id="checkBtn">Check Code</button>
+        <button id="clearBtn">Clear</button>
+        <button id="hintBtn">Hint (show first incorrect word)</button>
+        <button id="scrambleBtn">Scramble Hint (random order)</button>
+      </div>
+
+      <div id="result" class="result warn" style="display:none"></div>
+      <div id="tokens" class="tokens"></div>
+      <p class="hint">Tip: You can paste words with extra spaces or punctuation — we’ll tidy it up.</p>
+    </section>
+
+    <p class="footer">Designed for Buckshaw ROF</p>
+  </main>
+
+  <script>
+    // Correct codes per team (8 words each)
+    const CODES = {
+      1: ["RED","EAGLE","HAS","FLOWN","SOUTH","WITH","THE","PACKAGE"],
+      2: ["SHADOW","FOX","WAITS","UNDER","BRIDGE","AS","CLOCK","STRIKES"],
+      3: ["IRON","SERPENT","WAITS","EAST","BENEATH","BRIDGE","AT","MIDNIGHT"],
+      4: ["OBSIDIAN","STAR","FALLS","WEST","LEAVING","TRAILS","OF","ASHES"]
+    };
+
+    const teamSel = document.getElementById('team');
+    const modeSel = document.getElementById('mode');
+    const phraseBox = document.getElementById('phraseBox');
+    const wordsBox = document.getElementById('wordsBox');
+    const phraseTA = document.getElementById('phrase');
+    const wordInputsWrap = document.getElementById('wordInputs');
+    const checkBtn = document.getElementById('checkBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const hintBtn = document.getElementById('hintBtn');
+    const scrambleBtn = document.getElementById('scrambleBtn');
+    const result = document.getElementById('result');
+    const tokensWrap = document.getElementById('tokens');
+
+    let hintUsed = false; // track if hint has been used
+    let celebrating = false; // prevent overlapping celebrations
+    let alerting = false;     // prevent overlapping alerts
+
+    // Build 8 inputs for word mode
+    function buildWordInputs() {
+      wordInputsWrap.innerHTML = '';
+      for (let i=0;i<8;i++) {
+        const div = document.createElement('div');
+        const lab = document.createElement('label');
+        lab.textContent = `Word ${i+1}`;
+        lab.setAttribute('for', `w${i}`);
+        lab.style.marginBottom = '4px';
+        lab.style.display = 'block';
+        lab.style.fontWeight = 'bold';
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.id = `w${i}`;
+        inp.placeholder = `Word ${i+1}`;
+        div.appendChild(lab);
+        div.appendChild(inp);
+        wordInputsWrap.appendChild(div);
+      }
+    }
+    buildWordInputs();
+
+    modeSel.addEventListener('change', () => {
+      const mode = modeSel.value;
+      if (mode === 'phrase') { phraseBox.style.display = ''; wordsBox.style.display = 'none'; }
+      else { phraseBox.style.display = 'none'; wordsBox.style.display = ''; }
+      clearAll();
+    });
+
+    function normalise(str) {
+      return str
+        .replace(/[“”‘’]/g, m => ({"“":"\"","”":"\"","‘":"'","’":"'"}[m]))
+        .replace(/[^A-Za-z0-9\s']/g, ' ')
+        .trim();
+    }
+
+    function getEnteredWords() {
+      const mode = modeSel.value;
+      let words = [];
+      if (mode === 'phrase') {
+        const text = normalise(phraseTA.value);
+        words = text.split(/\s+/).filter(Boolean);
+      } else {
+        for (let i=0;i<8;i++) {
+          const v = document.getElementById(`w${i}`).value || '';
+          const t = normalise(v);
+          if (t) words.push(t);
+        }
+      }
+      return words.map(w => w.toUpperCase());
+    }
+
+    function showTokens(words, correct) {
+      tokensWrap.innerHTML = '';
+      for (let i=0;i<Math.max(words.length, correct.length); i++) {
+        const span = document.createElement('span');
+        span.className = 'token';
+        const w = words[i] ?? '∅';
+        span.textContent = w;
+        if (!correct[i]) {
+          span.classList.add('mis');
+        } else if (w !== correct[i]) {
+          span.classList.add('bad');
+        }
+        tokensWrap.appendChild(span);
+      }
+    }
+
+    // ===== SUCCESS: celebration (confetti + success tone + pulse) =====
+    function celebrate() {
+      if (celebrating) return;
+      celebrating = true;
+
+      // Pulse the success box
+      requestAnimationFrame(() => {
+        result.classList.remove('ok-animate');
+        void result.offsetWidth; // reflow to replay
+        result.classList.add('ok-animate');
+      });
+
+      // Confetti burst
+      const container = document.querySelector('.container');
+      const wrap = document.createElement('div');
+      wrap.className = 'confetti-wrap';
+      container.appendChild(wrap);
+
+      const colors = [ 'var(--accent)', 'var(--good)', 'var(--warn)', '#ffffff' ];
+      const pieces = 110;
+
+      for (let i = 0; i < pieces; i++) {
+        const p = document.createElement('div');
+        p.className = 'confetti';
+        const left = Math.random() * 100;
+        const dx = (Math.random() * 2 - 1) * 220;
+        const rot = (Math.random() * 720 + 360) + 'deg';
+        const dur = (Math.random() * 0.9 + 1.1).toFixed(2);
+        const delay = (Math.random() * 0.15).toFixed(2);
+
+        p.style.left = left + '%';
+        p.style.background = colors[i % colors.length];
+        p.style.animationDuration = dur + 's';
+        p.style.animationDelay = delay + 's';
+        p.style.setProperty('--dx', dx + 'px');
+        p.style.setProperty('--rot', rot);
+
+        const w = 6 + Math.random() * 7;
+        const h = 10 + Math.random() * 10;
+        p.style.width = w + 'px';
+        p.style.height = h + 'px';
+
+        wrap.appendChild(p);
+      }
+
+      // Success “ping” using Web Audio
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioCtx();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(880, ctx.currentTime);
+        o.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+        o.connect(g).connect(ctx.destination);
+        o.start();
+        o.stop(ctx.currentTime + 0.25);
+        if (ctx.state === 'suspended') ctx.resume();
+      } catch (e) { /* ignore if blocked */ }
+
+      // Cleanup
+      setTimeout(() => { wrap.remove(); celebrating = false; }, 2400);
+    }
+
+    // ===== WRONG: red beacon + shake + short buzz =====
+    function alertWrong() {
+      if (alerting) return;
+      alerting = true;
+
+      // Shake the result panel
+      requestAnimationFrame(() => {
+        result.classList.remove('err-animate');
+        void result.offsetWidth; // reflow to replay
+        result.classList.add('err-animate');
+      });
+
+      // Red beacon in the top-right of container
+      const container = document.querySelector('.container');
+      const b = document.createElement('div');
+      b.className = 'red-beacon';
+      container.appendChild(b);
+
+      // Optional: short “buzz”
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioCtx();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'square';
+        o.frequency.setValueAtTime(220, ctx.currentTime);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+        o.connect(g).connect(ctx.destination);
+        o.start(); o.stop(ctx.currentTime + 0.24);
+        if (ctx.state === 'suspended') ctx.resume();
+      } catch(e) { /* ignore if blocked */ }
+
+      setTimeout(() => { b.remove(); alerting = false; }, 700);
+    }
+
+    function evaluate() {
+      const team = teamSel.value;
+      const correct = CODES[team];
+      const words = getEnteredWords();
+
+      if (words.length !== 8) {
+        result.style.display = 'block';
+        result.className = 'result warn';
+        result.textContent = `You entered ${words.length} word(s). You need 8 words.`;
+        showTokens(words, correct);
+        return false;
+      }
+
+      let firstWrong = -1;
+      for (let i=0;i<8;i++) {
+        if (words[i] !== correct[i]) { firstWrong = i; break; }
+      }
+
+      if (firstWrong === -1) {
+        result.style.display = 'block';
+        result.className = 'result ok';
+        result.textContent = '✅ Correct code! Transmission verified. Extraction operation executed';
+        showTokens(words, correct);
+        celebrate(); // success animation/sound
+        return true;
+      } else {
+        result.style.display = 'block';
+        result.className = 'result err';
+        result.innerHTML = `❌ Incorrect. First mismatch at word <strong>${firstWrong+1}</strong>.`;
+        showTokens(words, correct);
+        alertWrong(); // wrong-code animation/sound
+        return false;
+      }
+    }
+
+    checkBtn.addEventListener('click', evaluate);
+
+    function clearAll() {
+      phraseTA.value = '';
+      for (let i=0;i<8;i++) document.getElementById(`w${i}`).value = '';
+      result.style.display = 'none';
+      tokensWrap.innerHTML = '';
+      hintUsed = false; // reset hint availability
+      hintBtn.disabled = false;
+    }
+    clearBtn.addEventListener('click', clearAll);
+
+    hintBtn.addEventListener('click', () => {
+      if (hintUsed) return; // only allow one hint
+      const team = teamSel.value; const correct = CODES[team];
+      const words = getEnteredWords();
+      let idx = words.findIndex((w,i) => w !== correct[i]);
+      if (idx === -1) idx = words.length < 8 ? words.length : 7;
+      result.style.display = 'block';
+      result.className = 'result warn';
+      result.innerHTML = `🔎 Hint: word <strong>${idx+1}</strong> should be <strong>${correct[idx]}</strong>.`;
+      showTokens(words, correct);
+      hintUsed = true;
+      hintBtn.disabled = true; // disable after use
+    });
+
+    scrambleBtn.addEventListener('click', () => {
+      const team = teamSel.value; const correct = CODES[team].slice();
+      for (let i = correct.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [correct[i], correct[j]] = [correct[j], correct[i]];
+      }
+      result.style.display = 'block';
+      result.className = 'result warn';
+      result.innerHTML = '🧩 Scramble hint (these are your 8 words in random order):<div class="tokens" style="margin-top:8px">' + correct.map(w => `<span class="token">${w}</span>`).join('') + '</div>';
+      tokensWrap.innerHTML = '';
+    });
+  </script>
+</body>
+</html>
