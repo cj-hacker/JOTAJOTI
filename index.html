@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cubs Code Checker – JOTI/JOTA</title>
+  <style>
+    :root {
+      --bg: #4d2177;        /* background */
+      --panel: #096800;     /* SOLID panel */
+      --muted: #94a3b8;     /* slate-400 */
+      --text: #ffffff;      /* gray-200 */
+      --accent: #22d3ee;    /* cyan-400 */
+      --good: #10b981;      /* emerald-500 */
+      --bad: #ef4444;       /* red-500 */
+      --warn: #f59e0b;      /* amber-500 */
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(1200px 800px at 80% -10%, #1f2937 0%, var(--bg) 60%);
+      color: var(--text);
+    }
+    header { padding: 24px 16px; text-align: center; }
+    header h1 { margin: 0; font-size: clamp(1.4rem, 2.5vw, 2rem); letter-spacing: 0.3px; }
+    header p { margin: 6px 0 0; color: var(--muted); }
+
+    .container { max-width: 920px; margin: 0 auto; padding: 16px; }
+    .card { background: var(--panel);
+            border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 700px) { .grid { grid-template-columns: 1fr 1fr; } }
+
+    label { display: block; font-size: 0.95rem; color: var(--muted); margin-bottom: 6px; font-weight: bold; }
+    select, input[type="text"], textarea {
+      width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);
+      background: #0b1020; color: var(--text); font-size: 1rem; outline: none;
+    }
+    textarea { min-height: 120px; resize: vertical; }
+
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    button {
+      padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12);
+      background: #091022; color: var(--text); cursor: pointer; font-weight: bold;
+      transition: transform .05s ease, border-color .2s ease; letter-spacing: .2px;
+    }
+    button:hover { border-color: var(--accent); }
+    button:active { transform: translateY(1px); }
+
+    .btn-accent { background: #06202a;
+                  border-color: rgba(34,211,238,0.35); box-shadow: inset 0 0 0 1px rgba(34,211,238,.15); }
+
+    .hint { color: var(--muted); font-size: 0.9rem; margin-top: 6px; }
+
+    .result { margin-top: 16px; padding: 14px; border-radius: 12px; line-height: 1.5; }
+    .ok { background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.4); }
+    .err { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.4); }
+    .warn { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.35); }
+
+    .tokens { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .token { padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.1); background: #0b1020; color: var(--text); }
+    .token.bad { border-color: rgba(239,68,68,.6); color: #ffd8d8; }
+    .token.mis { border-color: rgba(245,158,11,.7); color: #ffe9c7; }
+
+    .footer { text-align:center; color: var(--muted); font-size: .9rem; margin: 24px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📡 MI6 Secret Agent Code Checker</h1>
+    <p>Your special agent needs to know if it is safe to return home. Type your 8-word code to confirm extraction is arranged. The checker ignores case and punctuation.</p>
+  </header>
+  <main class="container">
+    <section class="card">
+      <div class="grid">
+        <div>
+          <label for="team">Team</label>
+          <select id="team" aria-label="Select team">
+            <option value="1">Team 1 — Red</option>
+            <option value="2">Team 2 — Green</option>
+            <option value="3">Team 3 — Yellow</option>
+            <option value="4">Team 4 — Blue</option>
+          </select>
+        </div>
+        <div>
+          <label for="mode">Entry Mode</label>
+          <select id="mode" aria-label="Select entry mode">
+            <option value="phrase">Single line (full sentence)</option>
+            <option value="words">Eight boxes (one word each)</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="phraseBox" style="margin-top:12px;">
+        <label for="phrase">Enter your full 8-word message</label>
+        <textarea id="phrase" placeholder="Type your code here… e.g. THE ELEPHANT HAS BIG FEET BUT TINY TOES"></textarea>
+      </div>
+
+      <div id="wordsBox" style="display:none; margin-top:12px;">
+        <label>Enter your 8 words in order</label>
+        <div class="grid" id="wordInputs"></div>
+      </div>
+
+      <div class="controls">
+        <button class="btn-accent" id="checkBtn">Check Code</button>
+        <button id="clearBtn">Clear</button>
+        <button id="hintBtn">Hint (show first incorrect word)</button>
+        <button id="scrambleBtn">Scramble Hint (random order)</button>
+      </div>
+
+      <div id="result" class="result warn" style="display:none"></div>
+      <div id="tokens" class="tokens"></div>
+      <p class="hint">Tip: You can paste words with extra spaces or punctuation — we’ll tidy it up.</p>
+    </section>
+
+    <p class="footer">Designed for Buckshaw ROF</p>
+  </main>
+
+  <script>
+    // Correct codes per team (8 words each)
+    const CODES = {
+      1: ["RED","EAGLE","HAS","FLOWN","SOUTH","WITH","THE","PACKAGE"],
+      2: ["SHADOW","FOX","WAITS","UNDER","BRIDGE","AS","CLOCK","STRIKES"],
+      3: ["IRON","SERPENT","WAITS","EAST","BENEATH","BRIDGE","AT","MIDNIGHT"],
+      4: ["OBSIDIAN","STAR","FALLS","WEST","LEAVING","TRAILS","OF","ASHES"]
+    };
+
+    const teamSel = document.getElementById('team');
+    const modeSel = document.getElementById('mode');
+    const phraseBox = document.getElementById('phraseBox');
+    const wordsBox = document.getElementById('wordsBox');
+    const phraseTA = document.getElementById('phrase');
+    const wordInputsWrap = document.getElementById('wordInputs');
+    const checkBtn = document.getElementById('checkBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const hintBtn = document.getElementById('hintBtn');
+    const scrambleBtn = document.getElementById('scrambleBtn');
+    const result = document.getElementById('result');
+    const tokensWrap = document.getElementById('tokens');
+
+    let hintUsed = false; // track if hint has been used
+
+    // Build 8 inputs for word mode
+    function buildWordInputs() {
+      wordInputsWrap.innerHTML = '';
+      for (let i=0;i<8;i++) {
+        const div = document.createElement('div');
+        const lab = document.createElement('label');
+        lab.textContent = `Word ${i+1}`;
+        lab.setAttribute('for', `w${i}`);
+        lab.style.marginBottom = '4px';
+        lab.style.display = 'block';
+        lab.style.fontWeight = 'bold';
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.id = `w${i}`;
+        inp.placeholder = `Word ${i+1}`;
+        div.appendChild(lab);
+        div.appendChild(inp);
+        wordInputsWrap.appendChild(div);
+      }
+    }
+    buildWordInputs();
+
+    modeSel.addEventListener('change', () => {
+      const mode = modeSel.value;
+      if (mode === 'phrase') { phraseBox.style.display = ''; wordsBox.style.display = 'none'; }
+      else { phraseBox.style.display = 'none'; wordsBox.style.display = ''; }
+      clearAll();
+    });
+
+    function normalise(str) {
+      return str
+        .replace(/[“”‘’]/g, m => ({"“":"\"","”":"\"","‘":"'","’":"'"}[m]))
+        .replace(/[^A-Za-z0-9\s']/g, ' ')
+        .trim();
+    }
+
+    function getEnteredWords() {
+      const mode = modeSel.value;
+      let words = [];
+      if (mode === 'phrase') {
+        const text = normalise(phraseTA.value);
+        words = text.split(/\s+/).filter(Boolean);
+      } else {
+        for (let i=0;i<8;i++) {
+          const v = document.getElementById(`w${i}`).value || '';
+          const t = normalise(v);
+          if (t) words.push(t);
+        }
+      }
+      return words.map(w => w.toUpperCase());
+    }
+
+    function showTokens(words, correct) {
+      tokensWrap.innerHTML = '';
+      for (let i=0;i<Math.max(words.length, correct.length); i++) {
+        const span = document.createElement('span');
+        span.className = 'token';
+        const w = words[i] ?? '∅';
+        span.textContent = w;
+        if (!correct[i]) {
+          span.classList.add('mis');
+        } else if (w !== correct[i]) {
+          span.classList.add('bad');
+        }
+        tokensWrap.appendChild(span);
+      }
+    }
+
+    function evaluate() {
+      const team = teamSel.value;
+      const correct = CODES[team];
+      const words = getEnteredWords();
+
+      if (words.length !== 8) {
+        result.style.display = 'block';
+        result.className = 'result warn';
+        result.textContent = `You entered ${words.length} word(s). You need 8 words.`;
+        showTokens(words, correct);
+        return false;
+      }
+
+      let firstWrong = -1;
+      for (let i=0;i<8;i++) {
+        if (words[i] !== correct[i]) { firstWrong = i; break; }
+      }
+
+      if (firstWrong === -1) {
+        result.style.display = 'block';
+        result.className = 'result ok';
+        result.textContent = '✅ Correct code! Transmission verified. Extraction operation executed';
+        showTokens(words, correct);
+        return true;
+      } else {
+        result.style.display = 'block';
+        result.className = 'result err';
+        result.innerHTML = `❌ Incorrect. First mismatch at word <strong>${firstWrong+1}</strong>.`;
+        showTokens(words, correct);
+        return false;
+      }
+    }
+
+    checkBtn.addEventListener('click', evaluate);
+
+    function clearAll() {
+      phraseTA.value = '';
+      for (let i=0;i<8;i++) document.getElementById(`w${i}`).value = '';
+      result.style.display = 'none';
+      tokensWrap.innerHTML = '';
+      hintUsed = false; // reset hint availability
+      hintBtn.disabled = false;
+    }
+    clearBtn.addEventListener('click', clearAll);
+
+    hintBtn.addEventListener('click', () => {
+      if (hintUsed) return; // only allow one hint
+      const team = teamSel.value; const correct = CODES[team];
+      const words = getEnteredWords();
+      let idx = words.findIndex((w,i) => w !== correct[i]);
+      if (idx === -1) idx = words.length < 8 ? words.length : 7;
+      result.style.display = 'block';
+      result.className = 'result warn';
+      result.innerHTML = `🔎 Hint: word <strong>${idx+1}</strong> should be <strong>${correct[idx]}</strong>.`;
+      showTokens(words, correct);
+      hintUsed = true;
+      hintBtn.disabled = true; // disable after use
+    });
+
+    scrambleBtn.addEventListener('click', () => {
+      const team = teamSel.value; const correct = CODES[team].slice();
+      for (let i = correct.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [correct[i], correct[j]] = [correct[j], correct[i]];
+      }
+      result.style.display = 'block';
+      result.className = 'result warn';
+      result.innerHTML = '🧩 Scramble hint (these are your 8 words in random order):<div class="tokens" style="margin-top:8px">' + correct.map(w => `<span class="token">${w}</span>`).join('') + '</div>';
+      tokensWrap.innerHTML = '';
+    });
+  </script>
+</body>
+</html>
